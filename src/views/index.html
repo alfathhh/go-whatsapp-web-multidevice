@@ -122,6 +122,7 @@
         <group-join-with-link></group-join-with-link>
         <group-info-from-link></group-info-from-link>
         <group-add-participants></group-add-participants>
+        <group-import-participants></group-import-participants>
         <group-set-photo></group-set-photo>
         <group-set-name></group-set-name>
         <group-set-locked></group-set-locked>
@@ -228,6 +229,7 @@
     import GroupJoinWithLink from "{{ .AppBasePath }}/components/GroupJoinWithLink.js";
     import GroupInfoFromLink from "{{ .AppBasePath }}/components/GroupInfoFromLink.js";
     import GroupAddParticipants from "{{ .AppBasePath }}/components/GroupManageParticipants.js";
+    import GroupImportParticipants from "{{ .AppBasePath }}/components/GroupImportParticipants.js";
     import GroupSetPhoto from "{{ .AppBasePath }}/components/GroupSetPhoto.js";
     import GroupSetName from "{{ .AppBasePath }}/components/GroupSetName.js";
     import GroupSetLocked from "{{ .AppBasePath }}/components/GroupSetLocked.js";
@@ -274,7 +276,7 @@
             AppLogin, AppLoginWithCode, AppLogout, AppReconnect,
             SendMessage, SendImage, SendFile, SendVideo, SendSticker, SendLink, SendContact, SendLocation, SendAudio, SendPoll, SendPresence, SendChatPresence,
             MessageDelete, MessageUpdate, MessageReact, MessageRevoke, MessageRead,
-            GroupList, GroupCreate, GroupJoinWithLink, GroupInfoFromLink, GroupAddParticipants, GroupSetPhoto, GroupSetName, GroupSetLocked, GroupSetAnnounce, GroupSetTopic, GroupGetInviteLink, GroupInfo,
+            GroupList, GroupCreate, GroupJoinWithLink, GroupInfoFromLink, GroupAddParticipants, GroupImportParticipants, GroupSetPhoto, GroupSetName, GroupSetLocked, GroupSetAnnounce, GroupSetTopic, GroupGetInviteLink, GroupInfo,
             NewsletterList,
             AccountAvatar, AccountUserInfo, AccountPrivacy, AccountChangeAvatar, AccountContact, AccountChangePushName, AccountUserCheck, AccountBusinessProfile,
             ChatPinManager, ChatDisappearingManager, ChatList, ChatMessages,
