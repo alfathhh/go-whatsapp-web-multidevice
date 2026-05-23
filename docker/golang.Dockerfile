@@ -32,7 +32,8 @@ WORKDIR /app
 # Copy compiled from builder.
 COPY --from=builder /app/whatsapp /app/whatsapp
 COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh && chown -R gowauser:gowa /app
+# Strip Windows CRLF line endings if present (safe no-op on LF files)
+RUN sed -i 's/\r//' /entrypoint.sh && chmod +x /entrypoint.sh && chown -R gowauser:gowa /app
 
 # Root only for entrypoint (ownership fix on volumes); process becomes gowauser.
 USER root
