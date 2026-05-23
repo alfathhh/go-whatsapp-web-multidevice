@@ -272,6 +272,89 @@ Note: Command-line flags will override any values set in environment variables o
 3. run `docker-compose up -d --build`
 4. open `http://localhost:3000`
 
+### Docker Compose — Using this Fork (Build Locally)
+
+If you are using **this fork** (which includes extra features like batch participant import), build the image locally from source instead of pulling from Docker Hub.
+
+1. Clone this fork:
+   ```bash
+   git clone https://github.com/alfathhh/go-whatsapp-web-multidevice.git
+   cd go-whatsapp-web-multidevice
+   ```
+
+2. Copy and edit the env file:
+   ```bash
+   cp src/.env.example src/.env
+   # edit src/.env as needed
+   ```
+
+3. Build and run:
+   ```bash
+   docker compose up -d --build
+   ```
+
+4. Open `http://localhost:3000`
+
+> **Note:** Always pass `--build` when you pull new changes so Docker rebuilds the image:
+> ```bash
+> git pull && docker compose up -d --build
+> ```
+
+The included `docker-compose.yml` already uses `build:` instead of `image:`, so no changes are needed.
+
+### Docker Compose — Using Original Image (aldinokemal)
+
+If you only need the **original features** (no fork customizations), you can use the pre-built image from Docker Hub or GitHub Container Registry.
+
+Create a `docker-compose.yml` file:
+
+**Docker Hub:**
+```yml
+services:
+  whatsapp:
+    image: aldinokemal2104/go-whatsapp-web-multidevice:latest
+    container_name: whatsapp
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - whatsapp:/app/storages
+    environment:
+      - APP_BASIC_AUTH=admin:admin
+      - APP_PORT=3000
+      - APP_OS=Chrome
+
+volumes:
+  whatsapp:
+```
+
+**GitHub Container Registry:**
+```yml
+services:
+  whatsapp:
+    image: ghcr.io/aldinokemal/go-whatsapp-web-multidevice:latest
+    container_name: whatsapp
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - whatsapp:/app/storages
+    environment:
+      - APP_BASIC_AUTH=admin:admin
+      - APP_PORT=3000
+      - APP_OS=Chrome
+
+volumes:
+  whatsapp:
+```
+
+Then run:
+```bash
+docker compose up -d
+```
+
+> **Heads-up:** Images from the original repo **do not include** customizations from this fork (e.g. batch participant import). Use the "Build Locally" method above if you need those features.
+
 ### Build your own binary
 
 1. Clone this repo `git clone https://github.com/aldinokemal/go-whatsapp-web-multidevice`
@@ -580,6 +663,7 @@ You can fork or edit this source code !
 | ✅       | Promote Participant in Group           | POST   | /group/participants/promote         |
 | ✅       | Demote Participant in Group            | POST   | /group/participants/demote          |
 | ✅       | Export Group Participants (CSV)        | GET    | /group/participants/export          |
+| ✅       | Import Participants via Excel/CSV      | POST   | /group/participants/import          |
 | ✅       | List Requested Participants in Group   | GET    | /group/participant-requests         |
 | ✅       | Approve Requested Participant in Group | POST   | /group/participant-requests/approve |
 | ✅       | Reject Requested Participant in Group  | POST   | /group/participant-requests/reject  |
