@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"io"
+	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/xuri/excelize/v2"
 
 	domainGroup "github.com/aldinokemal/go-whatsapp-web-multidevice/domains/group"
 	"github.com/aldinokemal/go-whatsapp-web-multidevice/infrastructure/whatsapp"
@@ -22,6 +25,7 @@ type Group struct {
 func InitRestGroup(app fiber.Router, service domainGroup.IGroupUsecase) Group {
 	rest := Group{Service: service}
 	app.Post("/group", rest.CreateGroup)
+	app.Post("/group/participants/import", rest.ImportParticipants)
 	app.Post("/group/join-with-link", rest.JoinGroupWithLink)
 	app.Get("/group/info-from-link", rest.GetGroupInfoFromLink)
 	app.Get("/group/info", rest.GroupInfo)
@@ -443,4 +447,172 @@ func (controller *Group) GetGroupInviteLink(c *fiber.Ctx) error {
 		Message: "Success get group invite link",
 		Results: response,
 	})
+}
+
+
+// ImportParticipants handles POST /group/participants/import
+// Menerima file Excel (.xlsx / .xls) atau CSV, membaca kolom nomor HP,
+// lalu menambahkan semua nomor tersebut sebagai peserta grup.
+//
+// Form fields:
+//   group_id  – ID grup (tanpa @g.us, akan ditambahkan otomatis jika belum ada)
+//   file      – file Excel (.xlsx) atau CSV
+//
+// Format file:
+//   - Baris pertama boleh header (akan dilewati jika isinya bukan angka)
+//   - Kolom pertama berisi nomor HP internasional (misal: 6281234567890)
+//   - Kolom tambahan diabaikan
+func (controller *Group) ImportParticipants(c *fiber.Ctx) error {
+	groupID := strings.TrimSpace(c.FormValue("group_id"))
+	if groupID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ResponseData{
+			Status:  400,
+			Code:    "INVALID_GROUP_ID",
+			Message: "group_id is required",
+		})
+	}
+	utils.SanitizePhone(&groupID)
+
+	fileHeader, err := c.FormFile("file")
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ResponseData{
+			Status:  400,
+			Code:    "FILE_REQUIRED",
+			Message: "file is required (.xlsx or .csv)",
+		})
+	}
+
+	f, err := fileHeader.Open()
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(utils.ResponseData{
+			Status:  500,
+			Code:    "FILE_OPEN_ERROR",
+			Message: fmt.Sprintf("cannot open uploaded file: %v", err),
+		})
+	}
+	defer f.Close()
+
+	filename := strings.ToLower(fileHeader.Filename)
+	var phones []string
+
+	switch {
+	case strings.HasSuffix(filename, ".csv"):
+		phones, err = parseCSV(f)
+	case strings.HasSuffix(filename, ".xlsx"), strings.HasSuffix(filename, ".xls"):
+		phones, err = parseExcel(f)
+	default:
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ResponseData{
+			Status:  400,
+			Code:    "UNSUPPORTED_FILE_TYPE",
+			Message: "only .xlsx, .xls, and .csv files are supported",
+		})
+	}
+
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ResponseData{
+			Status:  400,
+			Code:    "FILE_PARSE_ERROR",
+			Message: fmt.Sprintf("failed to parse file: %v", err),
+		})
+	}
+
+	if len(phones) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(utils.ResponseData{
+			Status:  400,
+			Code:    "NO_PARTICIPANTS",
+			Message: "no valid phone numbers found in the file",
+		})
+	}
+
+	logrus.Infof("ImportParticipants: group=%s total=%d phones parsed from %s", groupID, len(phones), fileHeader.Filename)
+
+	request := domainGroup.ParticipantRequest{
+		GroupID:      groupID,
+		Participants: phones,
+		Action:       whatsmeow.ParticipantChangeAdd,
+	}
+
+	result, err := controller.Service.ManageParticipant(
+		whatsapp.ContextWithDevice(c.UserContext(), getDeviceFromCtx(c)),
+		request,
+	)
+	utils.PanicIfNeeded(err)
+
+	return c.JSON(utils.ResponseData{
+		Status:  200,
+		Code:    "SUCCESS",
+		Message: fmt.Sprintf("Processed %d participants from file", len(phones)),
+		Results: result,
+	})
+}
+
+// digitOnly strips all non-digit characters from a string.
+var reNonDigit = regexp.MustCompile(`\D`)
+
+func sanitizePhone(raw string) string {
+	return reNonDigit.ReplaceAllString(strings.TrimSpace(raw), "")
+}
+
+// parseCSV reads phone numbers from the first column of a CSV file.
+// Baris header (nilai tidak numerik murni) dilewati secara otomatis.
+func parseCSV(r io.Reader) ([]string, error) {
+	reader := csv.NewReader(r)
+	reader.TrimLeadingSpace = true
+	reader.FieldsPerRecord = -1 // allow variable columns
+
+	records, err := reader.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	var phones []string
+	for _, row := range records {
+		if len(row) == 0 {
+			continue
+		}
+		phone := sanitizePhone(row[0])
+		if phone == "" {
+			continue
+		}
+		phones = append(phones, phone)
+	}
+	return phones, nil
+}
+
+// parseExcel reads phone numbers from the first column of the first sheet
+// of an Excel file (.xlsx or .xls).
+func parseExcel(r io.Reader) ([]string, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+
+	xlsx, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("cannot open excel: %w", err)
+	}
+	defer xlsx.Close()
+
+	sheets := xlsx.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, fmt.Errorf("excel file has no sheets")
+	}
+
+	rows, err := xlsx.GetRows(sheets[0])
+	if err != nil {
+		return nil, fmt.Errorf("cannot read sheet '%s': %w", sheets[0], err)
+	}
+
+	var phones []string
+	for _, row := range rows {
+		if len(row) == 0 {
+			continue
+		}
+		phone := sanitizePhone(row[0])
+		if phone == "" {
+			continue
+		}
+		phones = append(phones, phone)
+	}
+	return phones, nil
 }
